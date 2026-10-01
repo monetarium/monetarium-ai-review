@@ -1,0 +1,112 @@
+name: claude-review
+
+# Called from each repository's own claude-review.yml, which decides when to
+# run (the ai-review label) and passes what is specific to that repository.
+on:
+  workflow_call:
+    inputs:
+      requirements:
+        description: Path of the document the change is checked against; empty skips that step.
+        type: string
+        default: ""
+      trust_boundary:
+        description: Paths and spec sections in this repository that sit on a trust boundary.
+        type: string
+        default: ""
+    secrets:
+      CLAUDE_CODE_OAUTH_TOKEN:
+        required: true
+      AI_REVIEW_DEPLOY_KEY:
+        required: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: claude-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      # The caller's token cannot read this private repository; its read-only
+      # deploy key can. Default branch: the callers use @main too.
+      - name: Check out the review skills
+        uses: actions/checkout@v4
+        with:
+          repository: monetarium/monetarium-ai-review
+          path: .ai-review
+          ssh-key: ${{ secrets.AI_REVIEW_DEPLOY_KEY }}
+
+      # The review is posted by the last step, not by the model: a PR's
+      # content cannot steer a posting call it has no tool for.
+      - name: Install the skills, clear any review file the PR carries
+        run: |
+          mkdir -p ~/.claude
+          cp -R .ai-review/.claude/. ~/.claude/
+          rm -rf .ai-review .claude-review.md
+
+      - name: Review
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The job's own token; without it the action needs id-token: write and
+          # the Claude GitHub App, and skips any run whose workflow differs from main.
+          github_token: ${{ github.token }}
+          settings: '{"effortLevel": "high"}'
+          # No build tools: this job holds a token the PR's code must not see;
+          # each repository's own CI runs the gates.
+          claude_args: >-
+            --model claude-opus-5-5
+            --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git blame:*),Write,Bash(gh pr view:*),Bash(gh pr diff:*)"
+          prompt: |
+            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            No one is available to answer questions in this run: where a skill says to
+            ask or to stop and discuss, decide and state the reason in the review.
+            The PR head is checked out in the working directory; the base is
+            origin/${{ github.event.pull_request.base.ref }}.
+
+            1. Earlier rounds. Read the PR's existing reviews (`gh pr view --json reviews`).
+               If there are any, this is a re-review: check each earlier point against
+               the code as it is now, and review only the commits since the last one.
+            2. Correctness. Run the `code-review` skill on this working directory
+               against that base, without --comment. If that skill is not available,
+               do the same review yourself in a subagent.
+            3. Security, only when the diff touches a trust boundary: input from
+               outside (requests, foreign nodes), parsing, SQL, secrets, tokens or
+               auth, .github/ or .claude/. In this repository that is, for example:
+               ${{ inputs.trust_boundary || '(none listed)' }}.
+               Then run the `security-review` skill on the same target, with the same
+               fallback as step 2. Otherwise skip it.
+            4. Requirements, against ${{ inputs.requirements || '(none: skip this step)' }}:
+               every promise the diff touches, and every place outside the diff whose
+               behaviour the diff changes. The document states what must hold, not how;
+               do not ask for a mechanism it does not require.
+            5. Verify every finding against the code yourself. Drop what does not hold.
+            6. Run /rev-ci on the surviving findings (not on the code): the question is
+               which to keep, merge or drop, and the smallest fix for each. Apply its
+               verdicts only after checking each against the code.
+            7. Write the review body to .claude-review.md in the working directory;
+               a later step posts it as a comment review. The body opens with one
+               verdict line: `Blocking: none. Ready to approve.`, or
+               `Blocking: N (points …).` naming the points that must be fixed before
+               merge. If nothing survives, the verdict line and one line saying what
+               was checked are the whole body.
+
+            How the review is written:
+            - English. File references as `path:line`.
+            - Each point names the exact change; leave out anything you are not sure of.
+            - Fix, don't restructure. Long explanatory comments and the layout of the
+              docs are the author's style; do not ask to shorten or reorganise them.
+            - Most important point first; nits last and marked as not blocking.
+
+      - name: Post the review
+        if: hashFiles('.claude-review.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr review "$PR" --comment --body-file .claude-review.md
