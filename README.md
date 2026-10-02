@@ -42,3 +42,7 @@ Access → "Accessible from repositories in the 'monetarium' organization".
 `receiving-code-review`); the workflow installs them on the runner. They are
 pinned copies of the upstream plugins, so a review never runs code that changed
 upstream since it was last copied here.
+
+Pinned from upstream: `ponytail-review` from ponytail 4.10.0, `receiving-code-review`
+from obra/superpowers v6.4.2. To update, copy the file again and review the diff in
+the PR.
