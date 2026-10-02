@@ -92,7 +92,7 @@ jobs:
                verdicts only after checking each against the code.
             7. Write the review body to .claude-review.md in the working directory;
                a later step posts it as a comment review. The body opens with one
-               verdict line: `Blocking: none. Ready to approve.`, or
+               verdict line: `Blocking: none.`, or
                `Blocking: N (points …).` naming the points that must be fixed before
                merge. If nothing survives, the verdict line and one line saying what
                was checked are the whole body.
