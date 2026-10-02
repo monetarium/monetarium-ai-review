@@ -38,7 +38,12 @@ private half of this repository's read-only deploy key.
 This repository is private, so it is shared in Settings → Actions → General →
 Access → "Accessible from repositories in the 'monetarium' organization".
 
-`.claude/` holds the skills the review runs (`rev-ci`, `ponytail-review`,
-`receiving-code-review`); the workflow installs them on the runner. They are
-pinned copies of the upstream plugins, so a review never runs code that changed
-upstream since it was last copied here.
+`.claude/` holds the skills the review runs; the workflow installs them on the
+runner. The upstream ones are pinned copies, so a review never runs code that
+changed upstream since it was last copied here.
+
+| Skill | Source |
+|---|---|
+| `rev-ci` | ours |
+| `ponytail-review` | ponytail 4.10.0 |
+| `receiving-code-review` | obra/superpowers v6.4.2 |
