@@ -1,0 +1,21 @@
+name: actionlint
+
+# Callers use claude-review.yml@main, so a broken workflow on main breaks the
+# review in every repository at once.
+on:
+  pull_request:
+    paths: [".github/workflows/**"]
+  push:
+    branches: [main]
+    paths: [".github/workflows/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The image bundles shellcheck, so run: scripts are checked too.
+      - uses: docker://rhysd/actionlint:1.7.12
