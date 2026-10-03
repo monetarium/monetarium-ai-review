@@ -16,8 +16,10 @@ on:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
+      # Unused since this repository went public. Still declared because a
+      # caller passing an undeclared secret fails; drop it once none passes it.
       AI_REVIEW_DEPLOY_KEY:
-        required: true
+        required: false
 
 jobs:
   review:
@@ -33,14 +35,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      # The caller's token cannot read this private repository; its read-only
-      # deploy key can. Default branch: the callers use @main too.
+      # This repository is public, so the caller's token reads it.
+      # Default branch: the callers use @main too.
       - name: Check out the review skills
         uses: actions/checkout@v4
         with:
           repository: monetarium/monetarium-ai-review
           path: .ai-review
-          ssh-key: ${{ secrets.AI_REVIEW_DEPLOY_KEY }}
 
       # The review is posted by the last step, not by the model: a PR's
       # content cannot steer a posting call it has no tool for.
