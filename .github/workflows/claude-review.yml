@@ -16,8 +16,10 @@ on:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
+      # Unused since this repository went public. Still declared because a
+      # caller passing an undeclared secret fails; drop it once none passes it.
       AI_REVIEW_DEPLOY_KEY:
-        required: true
+        required: false
 
 jobs:
   review:
@@ -33,14 +35,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
 
-      # The caller's token cannot read this private repository; its read-only
-      # deploy key can. Default branch: the callers use @main too.
+      # This repository is public, so the caller's token reads it.
+      # Default branch: the callers use @main too.
       - name: Check out the review skills
         uses: actions/checkout@v4
         with:
           repository: monetarium/monetarium-ai-review
           path: .ai-review
-          ssh-key: ${{ secrets.AI_REVIEW_DEPLOY_KEY }}
 
       # The review is posted by the last step, not by the model: a PR's
       # content cannot steer a posting call it has no tool for.
@@ -51,6 +52,7 @@ jobs:
           rm -rf .ai-review .claude-review.md
 
       - name: Review
+        id: review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -62,7 +64,7 @@ jobs:
           # each repository's own CI runs the gates.
           claude_args: >-
             --model claude-opus-5-5
-            --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git blame:*),Write,Bash(gh pr view:*),Bash(gh pr diff:*)"
+            --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git blame:*),Bash(git status:*),Bash(git branch:*),Bash(ls:*),Bash(head:*),Write,Bash(gh pr view:*),Bash(gh pr diff:*)"
           prompt: |
             Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
             No one is available to answer questions in this run: where a skill says to
@@ -110,3 +112,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: gh pr review "$PR" --comment --body-file .claude-review.md
+
+      # The model's full output stays hidden (callers include public
+      # repositories); the skills and subagents it called and the commands it
+      # was denied are enough to see whether the review ran as written.
+      - name: List the skills called and the commands denied
+        if: always() && steps.review.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
+        run: |
+          jq -r '
+            (.[] | select(.type == "assistant") | .message.content[]?
+              | select(.type == "tool_use" and (.name == "Skill" or .name == "Agent"))
+              | "\(.name): \(.input.skill // .input.description)"),
+            (.[] | select(.type == "result") | .permission_denials[]?
+              | "denied: \(.tool_name) \(.tool_input.command // .tool_input.file_path // "")")
+          ' "$EXECUTION_FILE"

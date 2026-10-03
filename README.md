@@ -25,18 +25,16 @@ jobs:
       pull-requests: write
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-      AI_REVIEW_DEPLOY_KEY: ${{ secrets.AI_REVIEW_DEPLOY_KEY }}
     with:
       requirements: docs/requirements.md   # optional
       trust_boundary: internal/p2p, internal/store   # optional
 ```
 
-The calling repository needs the `ai-review` label and two secrets:
-`CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) and `AI_REVIEW_DEPLOY_KEY`, the
-private half of this repository's read-only deploy key.
+The calling repository needs the `ai-review` label and the
+`CLAUDE_CODE_OAUTH_TOKEN` secret (`claude setup-token`).
 
-This repository is private, so it is shared in Settings → Actions → General →
-Access → "Accessible from repositories in the 'monetarium' organization".
+This repository is public: a public repository can call a reusable workflow
+only from a public one.
 
 `.claude/` holds the skills the review runs; the workflow installs them on the
 runner. The upstream ones are pinned copies, so a review never runs code that
