@@ -16,10 +16,6 @@ on:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
-      # Unused since this repository went public. Still declared because a
-      # caller passing an undeclared secret fails; drop it once none passes it.
-      AI_REVIEW_DEPLOY_KEY:
-        required: false
 
 jobs:
   review:
@@ -34,6 +30,14 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+
+      # security-review diffs against origin/HEAD, which checkout does not
+      # create. Point it at the PR's base, not the default branch: explorer
+      # PRs target develop.
+      - name: Point origin/HEAD at the PR's base
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: git remote set-head origin "$BASE_REF"
 
       # This repository is public, so the caller's token reads it.
       # Default branch: the callers use @main too.
