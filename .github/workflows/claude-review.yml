@@ -16,10 +16,6 @@ on:
     secrets:
       CLAUDE_CODE_OAUTH_TOKEN:
         required: true
-      # Unused since this repository went public. Still declared because a
-      # caller passing an undeclared secret fails; drop it once none passes it.
-      AI_REVIEW_DEPLOY_KEY:
-        required: false
 
 jobs:
   review:
