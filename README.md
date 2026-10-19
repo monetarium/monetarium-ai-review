@@ -35,13 +35,3 @@ The calling repository needs the `ai-review` label and the
 
 This repository is public: a public repository can call a reusable workflow
 only from a public one.
-
-`.claude/` holds the skills the review runs; the workflow installs them on the
-runner. The upstream ones are pinned copies, so a review never runs code that
-changed upstream since it was last copied here.
-
-| Skill | Source |
-|---|---|
-| `rev-ci` | ours |
-| `ponytail-review` | ponytail 4.10.0 |
-| `receiving-code-review` | obra/superpowers v6.4.2 |

@@ -39,22 +39,6 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: git remote set-head origin "$BASE_REF"
 
-      # This repository is public, so the caller's token reads it.
-      # Default branch: the callers use @main too.
-      - name: Check out the review skills
-        uses: actions/checkout@v4
-        with:
-          repository: monetarium/monetarium-ai-review
-          path: .ai-review
-
-      # The review is posted by the last step, not by the model: a PR's
-      # content cannot steer a posting call it has no tool for.
-      - name: Install the skills
-        run: |
-          mkdir -p ~/.claude
-          cp -R .ai-review/.claude/. ~/.claude/
-          rm -rf .ai-review
-
       - name: Review
         id: review
         uses: anthropics/claude-code-action@v1
@@ -117,6 +101,8 @@ jobs:
               docs are the author's style; do not ask to shorten or reorganise them.
             - Most important point first; nits last and marked as not blocking.
 
+      # The review is posted by this step, not by the model: a PR's content
+      # cannot steer a posting call it has no tool for.
       - name: Post the review
         env:
           GH_TOKEN: ${{ github.token }}
