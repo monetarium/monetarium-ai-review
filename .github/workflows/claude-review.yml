@@ -71,7 +71,8 @@ jobs:
 
             1. Earlier rounds. Read the PR's existing reviews (`gh pr view --json reviews`).
                If there are any, this is a re-review: check each earlier point against
-               the code as it is now, and review only the commits since the last one.
+               the code as it is now. Steps 2-4 still cover the whole PR, not only the
+               commits since the last review: an earlier round may have missed things.
             2. Correctness. Run the `code-review` skill at level `high` on this working
                directory against that base, without --comment. Run it on every PR,
                however small the diff; your own reading does not replace it.
