@@ -75,6 +75,8 @@ jobs:
             ask or to stop and discuss, decide and state the reason in the review.
             The PR head is checked out in the working directory; the base is
             origin/${{ github.event.pull_request.base.ref }}.
+            Start git commands with `git`, with no `cd` and no `-C`: the working
+            directory is already the repository root, and only plain `git` is allowed.
 
             1. Earlier rounds. Read the PR's existing reviews (`gh pr view --json reviews`).
                If there are any, this is a re-review: check each earlier point against
@@ -117,15 +119,31 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: gh pr review "$PR" --comment --body-file .claude-review.md
 
+      # A green run with no review reads as "nothing to say"; fail it instead.
+      - name: Fail when the model wrote no review
+        if: hashFiles('.claude-review.md') == ''
+        run: |
+          echo "::error::The review step finished but wrote no .claude-review.md, so nothing was posted. See the turns, tools and denied commands in the next step."
+          exit 1
+
       # The model's full output stays hidden (callers include public
-      # repositories); the skills and subagents it called and the commands it
-      # was denied are enough to see whether the review ran as written.
+      # repositories); the skills and subagents it called, the commands it was
+      # denied, how the run ended, its tool-call counts and the files it wrote
+      # are enough to see whether the review ran as written.
       - name: List the skills called and the commands denied
         if: always() && steps.review.outputs.execution_file != ''
         env:
           EXECUTION_FILE: ${{ steps.review.outputs.execution_file }}
         run: |
           jq -r '
+            (.[] | select(.type == "result")
+              | "result: subtype=\(.subtype) stop_reason=\(.stop_reason // "-") turns=\(.num_turns) cost=$\(.total_cost_usd)"),
+            ("tools: " + ([.[] | select(.type == "assistant") | .message.content[]?
+              | select(.type == "tool_use") | .name]
+              | group_by(.) | map("\(.[0])=\(length)") | join(" "))),
+            (.[] | select(.type == "assistant") | .message.content[]?
+              | select(.type == "tool_use" and .name == "Write")
+              | "wrote: \(.input.file_path)"),
             (.[] | select(.type == "assistant") | .message.content[]?
               | select(.type == "tool_use" and (.name == "Skill" or .name == "Agent"))
               | "\(.name): \(.input.skill // .input.description)"),
