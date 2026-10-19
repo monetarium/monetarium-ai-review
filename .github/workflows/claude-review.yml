@@ -73,14 +73,14 @@ jobs:
                If there are any, this is a re-review: check each earlier point against
                the code as it is now, and review only the commits since the last one.
             2. Correctness. Run the `code-review` skill at level `high` on this working
-               directory against that base, without --comment. If that skill is not
-               available, do the same review yourself.
+               directory against that base, without --comment. Run it on every PR,
+               however small the diff; your own reading does not replace it.
             3. Security, only when the diff touches a trust boundary: input from
                outside (requests, foreign nodes), parsing, SQL, secrets, tokens or
                auth, .github/ or .claude/. In this repository that is, for example:
                ${{ inputs.trust_boundary || '(none listed)' }}.
-               Then run the `security-review` skill on the same target, the same way as
-               step 2. Otherwise skip it.
+               Then run the `security-review` skill on the same target; as in step 2,
+               your own reading does not replace it. Otherwise skip it.
             4. Requirements, against ${{ inputs.requirements || '(none: skip this step)' }}:
                every promise the diff touches, and every place outside the diff whose
                behaviour the diff changes. The document states what must hold, not how;
