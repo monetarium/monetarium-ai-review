@@ -64,6 +64,9 @@ jobs:
           # the Claude GitHub App, and skips any run whose workflow differs from main.
           github_token: ${{ github.token }}
           settings: '{"effortLevel": "high"}'
+          # TEMPORARY: find out why explorer PR #625 ends without a review file.
+          # Prints the model's whole output into the public run log; revert once found.
+          show_full_output: true
           # No build tools: this job holds a token the PR's code must not see;
           # each repository's own CI runs the gates.
           claude_args: >-
