@@ -80,6 +80,9 @@ jobs:
             origin/${{ github.event.pull_request.base.ref }}.
             Start git commands with `git`, with no `cd` and no `-C`: the working
             directory is already the repository root, and only plain `git` is allowed.
+            The only deliverable is the file in step 7. What the skills return is
+            input to steps 5-7, not your answer: even a report that says "no
+            findings" does not end the task, so do not stop before the file is written.
 
             1. Earlier rounds. Read the PR's existing reviews (`gh pr view --json reviews`).
                If there are any, this is a re-review: check each earlier point against
