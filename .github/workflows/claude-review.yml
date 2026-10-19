@@ -39,22 +39,6 @@ jobs:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: git remote set-head origin "$BASE_REF"
 
-      # This repository is public, so the caller's token reads it.
-      # Default branch: the callers use @main too.
-      - name: Check out the review skills
-        uses: actions/checkout@v4
-        with:
-          repository: monetarium/monetarium-ai-review
-          path: .ai-review
-
-      # The review is posted by the last step, not by the model: a PR's
-      # content cannot steer a posting call it has no tool for.
-      - name: Install the skills, clear any review file the PR carries
-        run: |
-          mkdir -p ~/.claude
-          cp -R .ai-review/.claude/. ~/.claude/
-          rm -rf .ai-review .claude-review.md
-
       - name: Review
         id: review
         uses: anthropics/claude-code-action@v1
@@ -66,9 +50,13 @@ jobs:
           settings: '{"effortLevel": "high"}'
           # No build tools: this job holds a token the PR's code must not see;
           # each repository's own CI runs the gates.
+          # The answer must match the schema or the step fails. security-review
+          # says its report is the final reply, and with a file to write the model
+          # sometimes obeyed it and ended without a review (explorer #625).
           claude_args: >-
             --model claude-opus-5-5
-            --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git blame:*),Bash(git status:*),Bash(git branch:*),Bash(ls:*),Bash(head:*),Write,Bash(gh pr view:*),Bash(gh pr diff:*)"
+            --allowedTools "Read,Grep,Glob,Agent,Skill,Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git blame:*),Bash(git status:*),Bash(git branch:*),Bash(ls:*),Bash(head:*),Bash(gh pr view:*),Bash(gh pr diff:*)"
+            --json-schema '{"type":"object","properties":{"body":{"type":"string","pattern":"^Blocking: "}},"required":["body"],"additionalProperties":false}'
           prompt: |
             Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
             No one is available to answer questions in this run: where a skill says to
@@ -77,18 +65,18 @@ jobs:
             origin/${{ github.event.pull_request.base.ref }}.
             Start git commands with `git`, with no `cd` and no `-C`: the working
             directory is already the repository root, and only plain `git` is allowed.
-            The only deliverable is the file in step 7. What the skills return is
-            input to steps 5-7, not your answer: even a report that says "no
-            findings" does not end the task, so do not stop before the file is written.
+            Your answer is the review in step 6, returned as `body`. What the skills
+            return is input to steps 5-6, not your answer: even a report that says
+            "no findings" does not end the task.
 
             1. Earlier rounds. Read the PR's existing reviews (`gh pr view --json reviews`).
                If there are any, this is a re-review: check each earlier point against
                the code as it is now, and review only the commits since the last one.
             2. Correctness. In a subagent (the Agent tool), run the `code-review` skill
-               on this working directory against that base, without --comment, and have
-               it return its findings to you. Do not run the skill in this conversation:
-               its report format would become your final answer. If that skill is not
-               available, the subagent does the same review itself.
+               at level `high` on this working directory against that base, without
+               --comment, and have it return its findings to you. Do not run the skill
+               in this conversation: its report format would become your final answer.
+               If that skill is not available, the subagent does the same review itself.
             3. Security, only when the diff touches a trust boundary: input from
                outside (requests, foreign nodes), parsing, SQL, secrets, tokens or
                auth, .github/ or .claude/. In this repository that is, for example:
@@ -100,12 +88,8 @@ jobs:
                behaviour the diff changes. The document states what must hold, not how;
                do not ask for a mechanism it does not require.
             5. Verify every finding against the code yourself. Drop what does not hold.
-            6. Run /rev-ci on the surviving findings (not on the code): the question is
-               which to keep, merge or drop, and the smallest fix for each. Apply its
-               verdicts only after checking each against the code.
-            7. Write the review body to .claude-review.md in the working directory;
-               a later step posts it as a comment review. The body opens with one
-               verdict line: `Blocking: none.`, or
+            6. Return the review body as `body`; a later step posts it as a comment
+               review. The body opens with one verdict line: `Blocking: none.`, or
                `Blocking: N (points …).` naming the points that must be fixed before
                merge. If nothing survives, the verdict line and one line saying what
                was checked are the whole body.
@@ -117,24 +101,19 @@ jobs:
               docs are the author's style; do not ask to shorten or reorganise them.
             - Most important point first; nits last and marked as not blocking.
 
+      # The review is posted by this step, not by the model: a PR's content
+      # cannot steer a posting call it has no tool for.
       - name: Post the review
-        if: hashFiles('.claude-review.md') != ''
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
-        run: gh pr review "$PR" --comment --body-file .claude-review.md
-
-      # A green run with no review reads as "nothing to say"; fail it instead.
-      - name: Fail when the model wrote no review
-        if: hashFiles('.claude-review.md') == ''
-        run: |
-          echo "::error::The review step finished but wrote no .claude-review.md, so nothing was posted. See the turns, tools and denied commands in the next step."
-          exit 1
+          BODY: ${{ fromJSON(steps.review.outputs.structured_output).body }}
+        run: gh pr review "$PR" --comment --body "$BODY"
 
       # The model's full output stays hidden (callers include public
       # repositories); the skills and subagents it called, the commands it was
-      # denied, how the run ended, its tool-call counts and the files it wrote
-      # are enough to see whether the review ran as written.
+      # denied, how the run ended and its tool-call counts are enough to see
+      # whether the review ran as written.
       - name: List the skills called and the commands denied
         if: always() && steps.review.outputs.execution_file != ''
         env:
@@ -146,9 +125,6 @@ jobs:
             ("tools: " + ([.[] | select(.type == "assistant") | .message.content[]?
               | select(.type == "tool_use") | .name]
               | group_by(.) | map("\(.[0])=\(length)") | join(" "))),
-            (.[] | select(.type == "assistant") | .message.content[]?
-              | select(.type == "tool_use" and .name == "Write")
-              | "wrote: \(.input.file_path)"),
             (.[] | select(.type == "assistant") | .message.content[]?
               | select(.type == "tool_use" and (.name == "Skill" or .name == "Agent"))
               | "\(.name): \(.input.skill // .input.description)"),
